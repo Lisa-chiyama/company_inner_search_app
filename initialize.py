@@ -11,6 +11,7 @@ from logging.handlers import TimedRotatingFileHandler
 from uuid import uuid4
 import sys
 import unicodedata
+import pandas as pd
 from dotenv import load_dotenv
 import streamlit as st
 from docx import Document
@@ -18,6 +19,7 @@ from langchain_community.document_loaders import WebBaseLoader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
+from langchain.schema import Document as LangChainDocument
 import constants as ct
 
 
@@ -212,10 +214,92 @@ def file_load(path, docs_all):
     # ファイル名（拡張子を含む）を取得
     file_name = os.path.basename(path)
 
+    # 社員名簿.csvファイルの場合は特別処理
+    if file_name == "社員名簿.csv":
+        load_employee_csv(path, docs_all)
+        return
+
     # 想定していたファイル形式の場合のみ読み込む
     if file_extension in ct.SUPPORTED_EXTENSIONS:
         # ファイルの拡張子に合ったdata loaderを使ってデータ読み込み
         loader = ct.SUPPORTED_EXTENSIONS[file_extension](path)
+        docs = loader.load()
+        docs_all.extend(docs)
+
+
+def load_employee_csv(path, docs_all):
+    """
+    社員名簿CSVファイルを統合されたドキュメントとして読み込み
+
+    Args:
+        path: CSVファイルパス
+        docs_all: データソースを格納する用のリスト
+    """
+    try:
+        # CSVファイルを読み込み
+        df = pd.read_csv(path, encoding='utf-8')
+        
+        # 部署ごとにグループ化して統合ドキュメントを作成
+        departments = df['部署'].unique()
+        
+        for dept in departments:
+            dept_employees = df[df['部署'] == dept]
+            
+            # 部署の統合テキストを作成
+            dept_text = f"【{dept}の従業員情報】\n\n"
+            dept_text += f"{dept}には{len(dept_employees)}名の従業員が所属しています。\n\n"
+            
+            # 各従業員の詳細情報を追加
+            for _, employee in dept_employees.iterrows():
+                emp_info = f"社員ID: {employee['社員ID']}\n"
+                emp_info += f"氏名: {employee['氏名（フルネーム）']}\n"
+                emp_info += f"性別: {employee['性別']}\n"
+                emp_info += f"年齢: {employee['年齢']}歳\n"
+                emp_info += f"従業員区分: {employee['従業員区分']}\n"
+                emp_info += f"入社日: {employee['入社日']}\n"
+                emp_info += f"部署: {employee['部署']}\n"
+                emp_info += f"役職: {employee['役職']}\n"
+                emp_info += f"スキルセット: {employee['スキルセット']}\n"
+                emp_info += f"保有資格: {employee['保有資格']}\n"
+                emp_info += f"大学名: {employee['大学名']}\n"
+                emp_info += f"学部・学科: {employee['学部・学科']}\n"
+                emp_info += f"卒業年月日: {employee['卒業年月日']}\n"
+                emp_info += "\n" + "-" * 50 + "\n\n"
+                dept_text += emp_info
+            
+            # LangChainドキュメントとして追加
+            doc = LangChainDocument(
+                page_content=dept_text,
+                metadata={"source": path, "department": dept, "employee_count": len(dept_employees)}
+            )
+            docs_all.append(doc)
+            
+        # 全社員の統合ビューも作成
+        all_employees_text = f"【全社員情報】\n\n"
+        all_employees_text += f"全社員数: {len(df)}名\n\n"
+        
+        # 部署別集計
+        dept_summary = df['部署'].value_counts()
+        all_employees_text += "【部署別従業員数】\n"
+        for dept, count in dept_summary.items():
+            all_employees_text += f"- {dept}: {count}名\n"
+        
+        all_employees_text += "\n【全社員一覧】\n\n"
+        for _, employee in df.iterrows():
+            emp_summary = f"{employee['社員ID']}: {employee['氏名（フルネーム）']} ({employee['部署']} - {employee['役職']})\n"
+            all_employees_text += emp_summary
+        
+        # 全社員統合ドキュメントを追加
+        all_doc = LangChainDocument(
+            page_content=all_employees_text,
+            metadata={"source": path, "document_type": "company_overview", "total_employees": len(df)}
+        )
+        docs_all.append(all_doc)
+        
+    except Exception as e:
+        print(f"Error loading employee CSV: {e}")
+        # エラーの場合は従来の方法でロード
+        loader = ct.SUPPORTED_EXTENSIONS[".csv"](path)
         docs = loader.load()
         docs_all.extend(docs)
 
