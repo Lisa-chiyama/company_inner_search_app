@@ -67,7 +67,7 @@ with st.sidebar:
     st.header("利用目的")
 
     # ラジオで選択（内部モードの同期のみ行い、ここでは説明を描画しない）
-    mode_choice = st.radio("", ["社内文書検索", "社内問い合わせ"], index=0, key="mode_radio")
+    mode_choice = st.radio("モード選択", ["社内文書検索", "社内問い合わせ"], index=0, key="mode_radio", label_visibility="collapsed")
     if mode_choice == "社内文書検索":
         st.session_state.mode = getattr(ct, "ANSWER_MODE_1", "社内文書検索")
     else:
