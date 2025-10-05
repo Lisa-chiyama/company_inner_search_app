@@ -26,7 +26,9 @@ import constants as ct
 ############################################################
 # ブラウザタブの表示文言を設定
 st.set_page_config(
-    page_title=ct.APP_NAME
+    page_title=ct.APP_NAME if hasattr(ct, "APP_NAME") else "社内情報特化型生成AI検索アプリ",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 # ログ出力を行うためのロガーの設定
@@ -56,14 +58,45 @@ if not "initialized" in st.session_state:
 ############################################################
 # 4. 初期表示
 ############################################################
-# タイトル表示
-cn.display_app_title()
 
-# モード表示
-cn.display_select_mode()
+# タイトル（画像と同じ大見出し）
+st.title("社内情報特化型生成AI検索アプリ")
 
-# AIメッセージの初期表示
-cn.display_initial_ai_message()
+# サイドバー：利用目的＋説明カード＋入力例（重複なし、選択時は緑）
+with st.sidebar:
+    st.header("利用目的")
+
+    # ラジオで選択（内部モードの同期のみ行い、ここでは説明を描画しない）
+    mode_choice = st.radio("", ["社内文書検索", "社内問い合わせ"], index=0, key="mode_radio")
+    if mode_choice == "社内文書検索":
+        st.session_state.mode = getattr(ct, "ANSWER_MODE_1", "社内文書検索")
+    else:
+        st.session_state.mode = getattr(ct, "ANSWER_MODE_2", "社内問い合わせ")
+
+    # 常時2つの説明カードを表示し、選択中のみ緑（success）
+    # --- 社内文書検索 ---
+    st.markdown("**『社内文書検索』を選択した場合**")
+    if mode_choice == "社内文書検索":
+        st.success("入力内容と関連性が高い社内文書のありかを検索できます。")
+    else:
+        st.info("入力内容と関連性が高い社内文書のありかを検索できます。")
+    st.caption("【入力例】\n社員の育成方針に関するMTGの議事録")
+
+    # --- 社内問い合わせ ---
+    st.markdown("**『社内問い合わせ』を選択した場合**")
+    if mode_choice == "社内問い合わせ":
+        st.success("質問・要望に対して、社内文書の情報をもとに回答を得られます。")
+    else:
+        st.info("質問・要望に対して、社内文書の情報をもとに回答を得られます。")
+    st.caption("【入力例】\n人事部に所属している従業員情報を一覧化して")
+
+
+# 中央の緑・黄メッセージ
+st.success(
+    "こんにちは。私は社内文書の情報をもとに回答する生成AIチャットボットです。"
+    "サイドバーで利用目的を選択し、画面下部のチャット欄からメッセージを送信してください。"
+)
+st.warning("具体的に入力したほうが期待通りの回答を得やすいです。")
 
 
 ############################################################
@@ -84,7 +117,9 @@ except Exception as e:
 ############################################################
 # 6. チャット入力の受け付け
 ############################################################
-chat_message = st.chat_input(ct.CHAT_INPUT_HELPER_TEXT)
+chat_placeholder = "こちらからメッセージを送信してください。"
+helper_text = getattr(ct, "CHAT_INPUT_HELPER_TEXT", chat_placeholder)
+chat_message = st.chat_input(helper_text or chat_placeholder)
 
 
 ############################################################
