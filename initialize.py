@@ -245,54 +245,117 @@ def load_employee_csv(path, docs_all):
         for dept in departments:
             dept_employees = df[df['部署'] == dept]
             
-            # 部署の統合テキストを作成
-            dept_text = f"【{dept}の従業員情報】\n\n"
-            dept_text += f"{dept}には{len(dept_employees)}名の従業員が所属しています。\n\n"
+            # 検索精度向上のため、キーワードを多用した部署統合テキストを作成
+            dept_text = f"【{dept}所属従業員一覧】【{dept}の社員情報】【{dept}部門従業員リスト】\n\n"
+            dept_text += f"{dept}に所属している従業員数: {len(dept_employees)}名\n"
+            dept_text += f"{dept}の従業員は以下の通りです:\n\n"
             
-            # 各従業員の詳細情報を追加
+            # 従業員名の簡潔なリストを最初に提示（検索精度向上のため）
+            dept_text += f"◆{dept}所属従業員名簿:\n"
             for _, employee in dept_employees.iterrows():
-                emp_info = f"社員ID: {employee['社員ID']}\n"
+                dept_text += f"・{employee['氏名（フルネーム）']} ({employee['役職']})\n"
+            dept_text += "\n"
+            
+            # 各従業員の詳細情報
+            dept_text += f"◆{dept}従業員の詳細情報:\n\n"
+            for i, (_, employee) in enumerate(dept_employees.iterrows(), 1):
+                emp_info = f"【{i}人目】{employee['氏名（フルネーム）']} - {dept}所属\n"
+                emp_info += f"社員ID: {employee['社員ID']}\n"
                 emp_info += f"氏名: {employee['氏名（フルネーム）']}\n"
                 emp_info += f"性別: {employee['性別']}\n"
                 emp_info += f"年齢: {employee['年齢']}歳\n"
                 emp_info += f"従業員区分: {employee['従業員区分']}\n"
                 emp_info += f"入社日: {employee['入社日']}\n"
-                emp_info += f"部署: {employee['部署']}\n"
+                emp_info += f"所属部署: {employee['部署']}\n"
                 emp_info += f"役職: {employee['役職']}\n"
                 emp_info += f"スキルセット: {employee['スキルセット']}\n"
                 emp_info += f"保有資格: {employee['保有資格']}\n"
-                emp_info += f"大学名: {employee['大学名']}\n"
+                emp_info += f"出身大学: {employee['大学名']}\n"
                 emp_info += f"学部・学科: {employee['学部・学科']}\n"
                 emp_info += f"卒業年月日: {employee['卒業年月日']}\n"
-                emp_info += "\n" + "-" * 50 + "\n\n"
+                emp_info += f"メールアドレス: {employee['メールアドレス']}\n"
+                emp_info += "\n" + "="*60 + "\n\n"
                 dept_text += emp_info
+            
+            # 部署サマリーを追加
+            dept_text += f"\n【{dept}サマリー】\n"
+            dept_text += f"- 部署名: {dept}\n"
+            dept_text += f"- 総従業員数: {len(dept_employees)}名\n"
+            dept_text += f"- 平均年齢: {dept_employees['年齢'].mean():.1f}歳\n"
+            
+            # 従業員区分別の内訳
+            emp_type_counts = dept_employees['従業員区分'].value_counts()
+            dept_text += "- 従業員区分別内訳:\n"
+            for emp_type, count in emp_type_counts.items():
+                dept_text += f"  * {emp_type}: {count}名\n"
+            
+            # 役職別の内訳
+            position_counts = dept_employees['役職'].value_counts()
+            dept_text += "- 役職別内訳:\n"
+            for position, count in position_counts.items():
+                dept_text += f"  * {position}: {count}名\n"
             
             # LangChainドキュメントとして追加
             doc = LangChainDocument(
                 page_content=dept_text,
-                metadata={"source": path, "department": dept, "employee_count": len(dept_employees)}
+                metadata={
+                    "source": path, 
+                    "department": dept, 
+                    "employee_count": len(dept_employees),
+                    "document_type": "department_employee_list"
+                }
             )
             docs_all.append(doc)
+        
+        # 特別に人事部専用の追加ドキュメントを作成（検索精度向上のため）
+        hr_employees = df[df['部署'] == '人事部']
+        if len(hr_employees) > 0:
+            hr_focused_text = "人事部従業員情報一覧 人事部所属社員リスト 人事部門スタッフ名簿\n\n"
+            hr_focused_text += f"人事部に所属している従業員は{len(hr_employees)}名います。\n"
+            hr_focused_text += "人事部の従業員を一覧化すると以下の通りです:\n\n"
             
-        # 全社員の統合ビューも作成
-        all_employees_text = f"【全社員情報】\n\n"
-        all_employees_text += f"全社員数: {len(df)}名\n\n"
+            for i, (_, emp) in enumerate(hr_employees.iterrows(), 1):
+                hr_focused_text += f"{i}. {emp['氏名（フルネーム）']} ({emp['役職']}) - {emp['従業員区分']}\n"
+                hr_focused_text += f"   社員ID: {emp['社員ID']}, 年齢: {emp['年齢']}歳\n"
+                hr_focused_text += f"   入社日: {emp['入社日']}, スキル: {emp['スキルセット']}\n"
+                hr_focused_text += f"   資格: {emp['保有資格']}\n\n"
+            
+            hr_doc = LangChainDocument(
+                page_content=hr_focused_text,
+                metadata={
+                    "source": path,
+                    "department": "人事部",
+                    "employee_count": len(hr_employees),
+                    "document_type": "hr_focused_list"
+                }
+            )
+            docs_all.append(hr_doc)
+        
+        # 全社員の統合ビューも更新
+        all_employees_text = "全社員情報 全従業員一覧 社員名簿 従業員データベース\n\n"
+        all_employees_text += f"当社の全従業員数: {len(df)}名\n\n"
         
         # 部署別集計
         dept_summary = df['部署'].value_counts()
-        all_employees_text += "【部署別従業員数】\n"
+        all_employees_text += "【部署別従業員数一覧】\n"
         for dept, count in dept_summary.items():
-            all_employees_text += f"- {dept}: {count}名\n"
+            all_employees_text += f"- {dept}: {count}名が所属\n"
         
-        all_employees_text += "\n【全社員一覧】\n\n"
-        for _, employee in df.iterrows():
-            emp_summary = f"{employee['社員ID']}: {employee['氏名（フルネーム）']} ({employee['部署']} - {employee['役職']})\n"
-            all_employees_text += emp_summary
+        all_employees_text += "\n【各部署の従業員情報】\n"
+        for dept in departments:
+            dept_emps = df[df['部署'] == dept]
+            all_employees_text += f"\n◆{dept} ({len(dept_emps)}名):\n"
+            for _, emp in dept_emps.iterrows():
+                all_employees_text += f"  {emp['社員ID']}: {emp['氏名（フルネーム）']} ({emp['役職']})\n"
         
         # 全社員統合ドキュメントを追加
         all_doc = LangChainDocument(
             page_content=all_employees_text,
-            metadata={"source": path, "document_type": "company_overview", "total_employees": len(df)}
+            metadata={
+                "source": path, 
+                "document_type": "company_overview", 
+                "total_employees": len(df)
+            }
         )
         docs_all.append(all_doc)
         
